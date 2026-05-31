@@ -14,7 +14,6 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
   gemini: 'gemini-3.1-pro-preview',
-  opencode: 'anthropic/claude-sonnet-4-5',
 };
 
 const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] => {
@@ -23,9 +22,6 @@ const getPermissionModesForProvider = (provider: LLMProvider): PermissionMode[] 
   }
   if (provider === 'claude') {
     return ['default', 'auto', 'acceptEdits', 'bypassPermissions', 'plan'];
-  }
-  if (provider === 'opencode') {
-    return ['default'];
   }
   return ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
 };
@@ -55,7 +51,7 @@ type ChangeActiveModelApiResponse = {
 };
 
 export function useChatProviderState({ selectedSession, selectedProject }: UseChatProviderStateArgs) {
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>('bypassPermissions');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<LLMProvider>(() => {
     return (localStorage.getItem('selected-provider') as LLMProvider) || 'claude';
@@ -71,9 +67,6 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   });
   const [geminiModel, setGeminiModel] = useState<string>(() => {
     return localStorage.getItem('gemini-model') || FALLBACK_DEFAULT_MODEL.gemini;
-  });
-  const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
-    return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
   });
 
   const [providerModelCatalog, setProviderModelCatalog] = useState<
@@ -112,13 +105,10 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
       localStorage.setItem('gemini-model', model);
       return;
     }
-
-    setOpenCodeModel(model);
-    localStorage.setItem('opencode-model', model);
   }, []);
 
   const loadProviderModels = useCallback(async (options: { bypassCache?: boolean } = {}) => {
-    const providers: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini', 'opencode'];
+    const providers: LLMProvider[] = ['claude', 'cursor', 'codex', 'gemini'];
     const requestId = providerModelsRequestIdRef.current + 1;
     providerModelsRequestIdRef.current = requestId;
     const isHardRefresh = options.bypassCache === true;
@@ -249,26 +239,13 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
   }, [providerModelCatalog.gemini, geminiModel]);
 
   useEffect(() => {
-    const opencode = providerModelCatalog.opencode;
-    if (opencode) {
-      const next = pickStoredOrCurrent('opencode-model', opencodeModel, opencode);
-      if (next !== opencodeModel) {
-        setOpenCodeModel(next);
-      }
-      if (localStorage.getItem('opencode-model') !== next) {
-        localStorage.setItem('opencode-model', next);
-      }
-    }
-  }, [providerModelCatalog.opencode, opencodeModel]);
-
-  useEffect(() => {
     if (!selectedSession?.id) {
       return;
     }
 
     const savedMode = localStorage.getItem(`permissionMode-${selectedSession.id}`) as PermissionMode | null;
     const validModes = getPermissionModesForProvider(provider);
-    setPermissionMode(savedMode && validModes.includes(savedMode) ? savedMode : 'default');
+    setPermissionMode(savedMode && validModes.includes(savedMode) ? savedMode : 'bypassPermissions');
   }, [selectedSession?.id, provider]);
 
   useEffect(() => {
@@ -375,8 +352,6 @@ export function useChatProviderState({ selectedSession, selectedProject }: UseCh
     setCodexModel,
     geminiModel,
     setGeminiModel,
-    opencodeModel,
-    setOpenCodeModel,
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,

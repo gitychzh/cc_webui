@@ -14,7 +14,6 @@ interface SessionsResponse {
   cursorSessions?: ProjectSession[];
   codexSessions?: ProjectSession[];
   geminiSessions?: ProjectSession[];
-  opencodeSessions?: ProjectSession[];
 }
 
 export function useSessionsSource(projectId: string | undefined, enabled: boolean) {
@@ -34,7 +33,6 @@ export function useSessionsSource(projectId: string | undefined, enabled: boolea
         ...(data.cursorSessions ?? []),
         ...(data.codexSessions ?? []),
         ...(data.geminiSessions ?? []),
-        ...(data.opencodeSessions ?? []),
       ];
       return all.map<SessionResult>((s) => ({
         id: s.id,

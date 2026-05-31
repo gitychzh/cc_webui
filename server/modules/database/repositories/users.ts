@@ -50,7 +50,7 @@ export const userDb = {
   createUser(username: string, passwordHash: string): CreateUserResult {
     const db = getConnection();
     const result = db
-      .prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)')
+      .prepare('INSERT INTO users (username, password_hash, has_completed_onboarding) VALUES (?, ?, 1)')
       .run(username, passwordHash);
     return { id: result.lastInsertRowid, username };
   },

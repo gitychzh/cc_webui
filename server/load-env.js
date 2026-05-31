@@ -1,4 +1,6 @@
 // Load environment variables from .env before other imports execute.
+// Import logger first so console interception is active for all subsequent code.
+import './utils/logger.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';

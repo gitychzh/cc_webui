@@ -136,19 +136,12 @@ function buildShellCommand(
     return command;
   }
 
-  if (provider === 'opencode') {
-    if (hasSession && sessionId) {
-      return `opencode --session "${sessionId}"`;
-    }
-    return initialCommand || 'opencode';
-  }
-
-  const command = initialCommand || 'claude';
+  const command = initialCommand || 'claude --dangerously-skip-permissions';
   if (hasSession && sessionId) {
     if (os.platform() === 'win32') {
-      return `claude --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+      return `claude --dangerously-skip-permissions --resume "${sessionId}"; if ($LASTEXITCODE -ne 0) { claude --dangerously-skip-permissions }`;
     }
-    return `claude --resume "${sessionId}" || claude`;
+    return `claude --dangerously-skip-permissions --resume "${sessionId}" || claude --dangerously-skip-permissions`;
   }
   return command;
 }
@@ -396,8 +389,6 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'gemini'
                   ? 'Gemini'
-                  : provider === 'opencode'
-                    ? 'OpenCode'
                   : 'Claude';
           welcomeMsg = hasSession
             ? `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n`

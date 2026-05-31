@@ -12,7 +12,7 @@ import cors from 'cors';
 import mime from 'mime-types';
 import Database from 'better-sqlite3';
 
-import { AppError, WORKSPACES_ROOT, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -46,12 +46,6 @@ import {
     isGeminiSessionActive,
     getActiveGeminiSessions,
 } from './gemini-cli.js';
-import {
-    spawnOpenCode,
-    abortOpenCodeSession,
-    isOpenCodeSessionActive,
-    getActiveOpenCodeSessions,
-} from './opencode-cli.js';
 import sessionManager from './sessionManager.js';
 import {
     stripAnsiSequences,
@@ -78,6 +72,7 @@ import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { c } from './utils/colors.js';
+import { logger } from './utils/logger.js';
 
 const __dirname = getModuleDir(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
@@ -85,7 +80,7 @@ const __dirname = getModuleDir(import.meta.url);
 const APP_ROOT = findAppRoot(__dirname);
 const installMode = fs.existsSync(path.join(APP_ROOT, '.git')) ? 'git' : 'npm';
 
-console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
+logger.info('', 'SERVER_PORT from env:', process.env.SERVER_PORT);
 
 const app = express();
 const server = http.createServer(app);
@@ -101,25 +96,21 @@ const wss = createWebSocketServer(server, {
         spawnCursor,
         queryCodex,
         spawnGemini,
-        spawnOpenCode,
         abortClaudeSDKSession,
         abortCursorSession,
         abortCodexSession,
         abortGeminiSession,
-        abortOpenCodeSession,
         resolveToolApproval,
         isClaudeSDKSessionActive,
         isCursorSessionActive,
         isCodexSessionActive,
         isGeminiSessionActive,
-        isOpenCodeSessionActive,
         reconnectSessionWriter,
         getPendingApprovalsForSession,
         getActiveClaudeSDKSessions,
         getActiveCursorSessions,
         getActiveCodexSessions,
         getActiveGeminiSessions,
-        getActiveOpenCodeSessions,
     },
     shell: {
         getSessionById: (sessionId) => sessionManager.getSession(sessionId),
@@ -147,6 +138,20 @@ app.use(express.json({
     }
 }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Request timing middleware for performance monitoring
+app.use('/api', (req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        if (duration > 500) {
+            logger.warn('PERF', `${req.method} ${req.originalUrl} took ${duration}ms (status ${res.statusCode})`);
+        } else if (duration > 100) {
+            logger.info('PERF', `${req.method} ${req.originalUrl} took ${duration}ms (status ${res.statusCode})`);
+        }
+    });
+    next();
+});
 
 // Public health check endpoint (no authentication required)
 app.get('/health', (req, res) => {
@@ -228,7 +233,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
         // Get the project root directory (parent of server directory)
         const projectRoot = APP_ROOT;
 
-        console.log('Starting system update from directory:', projectRoot);
+        logger.info('', 'Starting system update from directory:', projectRoot);
 
         // Platform deployments use their own update workflow from the project root.
         const updateCommand = IS_PLATFORM
@@ -253,13 +258,13 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
         child.stdout.on('data', (data) => {
             const text = data.toString();
             output += text;
-            console.log('Update output:', text);
+            logger.info('', 'Update output:', text);
         });
 
         child.stderr.on('data', (data) => {
             const text = data.toString();
             errorOutput += text;
-            console.error('Update error:', text);
+            logger.error('', 'Update error:', text);
         });
 
         child.on('close', (code) => {
@@ -280,7 +285,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
         });
 
         child.on('error', (error) => {
-            console.error('Update process error:', error);
+            logger.error('', 'Update process error:', error);
             res.status(500).json({
                 success: false,
                 error: error.message
@@ -288,7 +293,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('System update error:', error);
+        logger.error('', 'System update error:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -312,8 +317,8 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
     try {
         const { path: dirPath } = req.query;
 
-        console.log('[API] Browse filesystem request for path:', dirPath);
-        console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);
+        logger.info('API', 'Browse filesystem request for path:', dirPath);
+        logger.info('API', 'WORKSPACES_ROOT is:', WORKSPACES_ROOT);
         // Default to home directory if no path provided
         const defaultRoot = WORKSPACES_ROOT;
         let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;
@@ -383,7 +388,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error browsing filesystem:', error);
+        logger.error('', 'Error browsing filesystem:', error);
         res.status(500).json({ error: 'Failed to browse filesystem' });
     }
 });
@@ -423,7 +428,7 @@ app.post('/api/create-folder', authenticateToken, async (req, res) => {
             throw mkdirError;
         }
     } catch (error) {
-        console.error('Error creating folder:', error);
+        logger.error('', 'Error creating folder:', error);
         res.status(500).json({ error: 'Failed to create folder' });
     }
 });
@@ -459,7 +464,7 @@ app.get('/api/projects/:projectId/file', authenticateToken, async (req, res) => 
         const content = await fsPromises.readFile(resolved, 'utf8');
         res.json({ content, path: resolved });
     } catch (error) {
-        console.error('Error reading file:', error);
+        logger.error('', 'Error reading file:', error);
         if (error.code === 'ENOENT') {
             res.status(404).json({ error: 'File not found' });
         } else if (error.code === 'EACCES') {
@@ -514,14 +519,14 @@ app.get('/api/projects/:projectId/files/content', authenticateToken, async (req,
         fileStream.pipe(res);
 
         fileStream.on('error', (error) => {
-            console.error('Error streaming file:', error);
+            logger.error('', 'Error streaming file:', error);
             if (!res.headersSent) {
                 res.status(500).json({ error: 'Error reading file' });
             }
         });
 
     } catch (error) {
-        console.error('Error serving binary file:', error);
+        logger.error('', 'Error serving binary file:', error);
         if (!res.headersSent) {
             res.status(500).json({ error: error.message });
         }
@@ -568,7 +573,7 @@ app.put('/api/projects/:projectId/file', authenticateToken, async (req, res) => 
             message: 'File saved successfully'
         });
     } catch (error) {
-        console.error('Error saving file:', error);
+        logger.error('', 'Error saving file:', error);
         if (error.code === 'ENOENT') {
             res.status(404).json({ error: 'File or directory not found' });
         } else if (error.code === 'EACCES') {
@@ -601,7 +606,7 @@ app.get('/api/projects/:projectId/files', authenticateToken, async (req, res) =>
         const files = await getFileTree(actualPath, 10, 0, true);
         res.json(files);
     } catch (error) {
-        console.error('[ERROR] File tree error:', error.message);
+        logger.error('ERROR', 'File tree error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
@@ -719,7 +724,7 @@ app.post('/api/projects/:projectId/files/create', authenticateToken, async (req,
             message: `${type === 'file' ? 'File' : 'Directory'} created successfully`
         });
     } catch (error) {
-        console.error('Error creating file/directory:', error);
+        logger.error('', 'Error creating file/directory:', error);
         if (error.code === 'EACCES') {
             res.status(403).json({ error: 'Permission denied' });
         } else if (error.code === 'ENOENT') {
@@ -794,7 +799,7 @@ app.put('/api/projects/:projectId/files/rename', authenticateToken, async (req, 
             message: 'Renamed successfully'
         });
     } catch (error) {
-        console.error('Error renaming file/directory:', error);
+        logger.error('', 'Error renaming file/directory:', error);
         if (error.code === 'EACCES') {
             res.status(403).json({ error: 'Permission denied' });
         } else if (error.code === 'ENOENT') {
@@ -859,7 +864,7 @@ app.delete('/api/projects/:projectId/files', authenticateToken, async (req, res)
             message: 'Deleted successfully'
         });
     } catch (error) {
-        console.error('Error deleting file/directory:', error);
+        logger.error('', 'Error deleting file/directory:', error);
         if (error.code === 'EACCES') {
             res.status(403).json({ error: 'Permission denied' });
         } else if (error.code === 'ENOENT') {
@@ -900,7 +905,7 @@ const uploadFilesHandler = async (req, res) => {
     // Use multer middleware
     uploadMiddleware.array('files', 20)(req, res, async (err) => {
         if (err) {
-            console.error('Multer error:', err);
+            logger.error('', 'Multer error:', err);
             if (err.code === 'LIMIT_FILE_SIZE') {
                 return res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
             }
@@ -920,11 +925,11 @@ const uploadFilesHandler = async (req, res) => {
                 try {
                     filePaths = JSON.parse(relativePaths);
                 } catch (e) {
-                    console.log('[DEBUG] Failed to parse relativePaths:', relativePaths);
+                    logger.debug('DEBUG', 'Failed to parse relativePaths:', relativePaths);
                 }
             }
 
-            console.log('[DEBUG] File upload request:', {
+            logger.debug('DEBUG', 'File upload request:', {
                 projectId,
                 targetPath: JSON.stringify(targetPath),
                 targetPathType: typeof targetPath,
@@ -942,27 +947,27 @@ const uploadFilesHandler = async (req, res) => {
                 return res.status(404).json({ error: 'Project not found' });
             }
 
-            console.log('[DEBUG] Project root:', projectRoot);
+            logger.debug('DEBUG', 'Project root:', projectRoot);
 
             // Validate and resolve target path
             // If targetPath is empty or '.', use project root directly
             const targetDir = targetPath || '';
             let resolvedTargetDir;
 
-            console.log('[DEBUG] Target dir:', JSON.stringify(targetDir));
+            logger.debug('DEBUG', 'Target dir:', JSON.stringify(targetDir));
 
             if (!targetDir || targetDir === '.' || targetDir === './') {
                 // Empty path means upload to project root
                 resolvedTargetDir = path.resolve(projectRoot);
-                console.log('[DEBUG] Using project root as target:', resolvedTargetDir);
+                logger.debug('DEBUG', 'Using project root as target:', resolvedTargetDir);
             } else {
                 const validation = validatePathInProject(projectRoot, targetDir);
                 if (!validation.valid) {
-                    console.log('[DEBUG] Path validation failed:', validation.error);
+                    logger.debug('DEBUG', 'Path validation failed:', validation.error);
                     return res.status(403).json({ error: validation.error });
                 }
                 resolvedTargetDir = validation.resolved;
-                console.log('[DEBUG] Resolved target dir:', resolvedTargetDir);
+                logger.debug('DEBUG', 'Resolved target dir:', resolvedTargetDir);
             }
 
             // Ensure target directory exists
@@ -974,18 +979,18 @@ const uploadFilesHandler = async (req, res) => {
 
             // Move uploaded files from temp to target directory
             const uploadedFiles = [];
-            console.log('[DEBUG] Processing files:', req.files.map(f => ({ originalname: f.originalname, path: f.path })));
+            logger.debug('DEBUG', 'Processing files:', req.files.map(f => ({ originalname: f.originalname, path: f.path })));
             for (let i = 0; i < req.files.length; i++) {
                 const file = req.files[i];
                 // Use relative path if provided (for folder uploads), otherwise use originalname
                 const fileName = (filePaths && filePaths[i]) ? filePaths[i] : file.originalname;
-                console.log('[DEBUG] Processing file:', fileName, '(originalname:', file.originalname + ')');
+                logger.debug('DEBUG', 'Processing file:', fileName, '(originalname:', file.originalname + ')');
                 const destPath = path.join(resolvedTargetDir, fileName);
 
                 // Validate destination path
                 const destValidation = validatePathInProject(projectRoot, destPath);
                 if (!destValidation.valid) {
-                    console.log('[DEBUG] Destination validation failed for:', destPath);
+                    logger.debug('DEBUG', 'Destination validation failed for:', destPath);
                     // Clean up temp file
                     await fsPromises.unlink(file.path).catch(() => {});
                     continue;
@@ -1018,7 +1023,7 @@ const uploadFilesHandler = async (req, res) => {
                 message: `Uploaded ${uploadedFiles.length} file(s) successfully`
             });
         } catch (error) {
-            console.error('Error uploading files:', error);
+            logger.error('', 'Error uploading files:', error);
             // Clean up any remaining temp files
             if (req.files) {
                 for (const file of req.files) {
@@ -1111,14 +1116,14 @@ app.post('/api/projects/:projectId/upload-images', authenticateToken, async (req
 
                 res.json({ images: processedImages });
             } catch (error) {
-                console.error('Error processing images:', error);
+                logger.error('', 'Error processing images:', error);
                 // Clean up any remaining files
                 await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => { })));
                 res.status(500).json({ error: 'Failed to process images' });
             }
         });
     } catch (error) {
-        console.error('Error in image upload endpoint:', error);
+        logger.error('', 'Error in image upload endpoint:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -1206,66 +1211,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
             });
         }
 
-        if (provider === 'opencode') {
-            const dbPath = getOpenCodeDatabasePath();
-            if (!fs.existsSync(dbPath)) {
-                return res.status(404).json({ error: 'OpenCode database not found' });
-            }
-
-            const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-            try {
-                const columns = db.prepare('PRAGMA table_info(session)').all();
-                const columnNames = new Set(columns.map((column) => column.name));
-                const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
-                if (!requiredColumns.every((column) => columnNames.has(column))) {
-                    return res.json({
-                        used: 0,
-                        inputTokens: 0,
-                        outputTokens: 0,
-                        breakdown: { input: 0, output: 0 },
-                        unsupported: true,
-                        message: 'Token usage tracking is not available in this OpenCode database schema'
-                    });
-                }
-
-                const row = db.prepare(`
-                    SELECT
-                        tokens_input AS inputTokens,
-                        tokens_output AS outputTokens,
-                        tokens_reasoning AS reasoningTokens,
-                        tokens_cache_read AS cacheReadTokens,
-                        tokens_cache_write AS cacheWriteTokens
-                    FROM session
-                    WHERE id = ?
-                `).get(safeSessionId);
-
-                if (!row) {
-                    return res.status(404).json({ error: 'OpenCode session not found', sessionId: safeSessionId });
-                }
-
-                const inputTokens = Number(row.inputTokens || 0) + Number(row.cacheReadTokens || 0);
-                const outputTokens = Number(row.outputTokens || 0);
-                const totalUsed = Number(row.inputTokens || 0)
-                    + outputTokens
-                    + Number(row.reasoningTokens || 0)
-                    + Number(row.cacheReadTokens || 0)
-                    + Number(row.cacheWriteTokens || 0);
-
-                return res.json({
-                    used: totalUsed,
-                    inputTokens,
-                    outputTokens,
-                    breakdown: {
-                        input: inputTokens,
-                        output: outputTokens
-                    }
-                });
-            } finally {
-                db.close();
-            }
-        }
-
-        // Handle Codex sessions
+// Handle Codex sessions
         if (provider === 'codex') {
             const codexSessionsDir = path.join(homeDir, '.codex', 'sessions');
 
@@ -1421,7 +1367,7 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
             }
         });
     } catch (error) {
-        console.error('Error reading session token usage:', error);
+        logger.error('', 'Error reading session token usage:', error);
         res.status(500).json({ error: 'Failed to read session token usage' });
     }
 });
@@ -1464,7 +1410,7 @@ app.use((err, req, res, next) => {
     });
   }
 
-  console.error(err);
+  logger.error('', err);
 
   return res.status(500).json({
     success: false,
@@ -1547,7 +1493,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
     } catch (error) {
         // Only log non-permission errors to avoid spam
         if (error.code !== 'EACCES' && error.code !== 'EPERM') {
-            console.error('Error reading directory:', error);
+            logger.error('', 'Error reading directory:', error);
         }
     }
 
@@ -1578,34 +1524,34 @@ async function startServer() {
         const isProduction = fs.existsSync(distIndexPath);
 
         // Log Claude implementation mode
-        console.log(`${c.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
-        console.log('');
+        logger.info('', 'Using Claude Agents SDK for Claude integration');
+        logger.log('');
 
         if (isProduction) {
-            console.log(`${c.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);            
+            logger.info('', `To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);            
         }
 
-        console.log(`${c.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
+        logger.info('', `To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
    
         server.listen(SERVER_PORT, HOST, async () => {
             const appInstallPath = APP_ROOT;
 
-            console.log('');
-            console.log(c.dim('═'.repeat(63)));
-            console.log(`  ${c.bright('CloudCLI Server - Ready')}`);
-            console.log(c.dim('═'.repeat(63)));
-            console.log('');
-            console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
-            console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
-            console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
-            console.log('');
+            logger.log('');
+            logger.info('', '===============================================================');
+            logger.info('', 'CloudCLI Server - Ready');
+            logger.info('', '===============================================================');
+            logger.log('');
+            logger.info('', `Server URL: http://${DISPLAY_HOST}:${SERVER_PORT}`);
+            logger.info('', `Installed at: ${appInstallPath}`);
+            logger.info('TIP', 'Run "cloudcli status" for full configuration details');
+            logger.log('');
 
             // Start watching the projects folder for changes
             await initializeSessionsWatcher();
 
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {
-                console.error('[Plugins] Error during startup:', err.message);
+                logger.error('Plugins', 'Error during startup:', err.message);
             });
         });
 
@@ -1618,7 +1564,7 @@ async function startServer() {
         process.on('SIGTERM', () => void shutdownPlugins());
         process.on('SIGINT', () => void shutdownPlugins());
     } catch (error) {
-        console.error('[ERROR] Failed to start server:', error);
+        logger.error('ERROR', 'Failed to start server:', error);
         process.exit(1);
     }
 }

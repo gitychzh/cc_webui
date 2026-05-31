@@ -33,7 +33,6 @@ type ProjectApiView = {
   cursorSessions: [];
   codexSessions: [];
   geminiSessions: [];
-  opencodeSessions: [];
   sessionMeta: {
     hasMore: false;
     total: 0;
@@ -85,7 +84,6 @@ function mapProjectRowToApiView(projectRow: ProjectRepositoryRow): ProjectApiVie
     cursorSessions: [],
     codexSessions: [],
     geminiSessions: [],
-    opencodeSessions: [],
     sessionMeta: {
       hasMore: false,
       total: 0,

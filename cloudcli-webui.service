@@ -1,0 +1,19 @@
+[Unit]
+Description=CloudCLI WebUI Server
+After=network.target
+
+[Service]
+Type=simple
+User=opc_uname
+WorkingDirectory=/home/opc_uname/cc_ps/cc_webui
+ExecStart=/home/opc_uname/.local/bin/node /home/opc_uname/cc_ps/cc_webui/dist-server/server/index.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/home/opc_uname/.npm-global/bin:/home/opc_uname/.local/bin
+EnvironmentFile=/home/opc_uname/cc_ps/cc_webui/.env
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

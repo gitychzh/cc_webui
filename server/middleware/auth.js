@@ -24,9 +24,10 @@ const authenticateToken = async (req, res, next) => {
   // Platform mode:  use single database user
   if (IS_PLATFORM) {
     try {
-      const user = userDb.getFirstUser();
+      let user = userDb.getFirstUser();
       if (!user) {
-        return res.status(500).json({ error: 'Platform mode: No user found in database' });
+        userDb.createUser('platform-user', 'no-password-needed');
+        user = userDb.getFirstUser();
       }
       req.user = user;
       return next();
@@ -93,11 +94,12 @@ const authenticateWebSocket = (token) => {
   // Platform mode: bypass token validation, return first user
   if (IS_PLATFORM) {
     try {
-      const user = userDb.getFirstUser();
-      if (user) {
-        return { id: user.id, userId: user.id, username: user.username };
+      let user = userDb.getFirstUser();
+      if (!user) {
+        userDb.createUser('platform-user', 'no-password-needed');
+        user = userDb.getFirstUser();
       }
-      return null;
+      return { id: user.id, userId: user.id, username: user.username };
     } catch (error) {
       console.error('Platform mode WebSocket error:', error);
       return null;

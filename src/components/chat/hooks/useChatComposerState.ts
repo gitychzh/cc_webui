@@ -41,7 +41,6 @@ interface UseChatComposerStateArgs {
   claudeModel: string;
   codexModel: string;
   geminiModel: string;
-  opencodeModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -172,7 +171,6 @@ export function useChatComposerState({
   claudeModel,
   codexModel,
   geminiModel,
-  opencodeModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -337,9 +335,7 @@ export function useChatComposerState({
               ? codexModel
               : provider === 'gemini'
                 ? geminiModel
-                : provider === 'opencode'
-                  ? opencodeModel
-                  : claudeModel,
+                : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -391,7 +387,6 @@ export function useChatComposerState({
       currentSessionId,
       cursorModel,
       geminiModel,
-      opencodeModel,
       handleBuiltInCommand,
       handleCustomCommand,
       input,
@@ -641,8 +636,6 @@ export function useChatComposerState({
                 ? 'codex-settings'
                 : provider === 'gemini'
                   ? 'gemini-settings'
-                  : provider === 'opencode'
-                    ? 'opencode-settings'
                   : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
@@ -710,20 +703,6 @@ export function useChatComposerState({
             toolsSettings,
           },
         });
-      } else if (provider === 'opencode') {
-        sendMessage({
-          type: 'opencode-command',
-          command: messageContent,
-          sessionId: effectiveSessionId,
-          options: {
-            cwd: resolvedProjectPath,
-            projectPath: resolvedProjectPath,
-            sessionId: effectiveSessionId,
-            resume: Boolean(effectiveSessionId),
-            model: opencodeModel,
-            sessionSummary,
-          },
-        });
       } else {
         sendMessage({
           type: 'claude-command',
@@ -766,7 +745,6 @@ export function useChatComposerState({
       cursorModel,
       executeCommand,
       geminiModel,
-      opencodeModel,
       isLoading,
       onSessionActive,
       onSessionProcessing,

@@ -34,10 +34,6 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'gemini',
     rootPath: path.join(os.homedir(), '.gemini', 'tmp'),
   },
-  {
-    provider: 'opencode',
-    rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
-  },
 ];
 
 const WATCHER_IGNORED_PATTERNS = [
@@ -71,10 +67,6 @@ let watcherRescheduleAfterRefresh = false;
  * Filters watcher events to provider-specific session artifact file types.
  */
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
-  if (provider === 'opencode') {
-    return path.basename(filePath) === 'opencode.db';
-  }
-
   if (provider === 'gemini') {
     return filePath.endsWith('.json') || filePath.endsWith('.jsonl');
   }
@@ -205,7 +197,7 @@ async function onUpdate(
     }
 
     console.log(`Session synchronization triggered by ${eventType} event for provider "${provider}"`, {
-      filePath,
+      filePath: path.basename(filePath),
       sessionId: result.sessionId,
     });
     queuePendingWatcherUpdate(eventType, provider, result.sessionId);
@@ -241,9 +233,11 @@ export async function initializeSessionsWatcher(): Promise<void> {
         ignoreInitial: true,
         followSymlinks: false,
         depth: 6,
-        usePolling: true,
-        interval: 6_000,
-        binaryInterval: 6_000,
+        usePolling: false,
+        awaitWriteFinish: {
+          stabilityThreshold: 2_000,
+          pollInterval: 500,
+        },
       });
 
       watcher

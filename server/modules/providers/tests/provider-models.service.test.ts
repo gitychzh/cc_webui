@@ -250,10 +250,10 @@ test('provider models service delegates current active model lookups to the prov
     }),
   });
 
-  const activeModel = await service.getCurrentActiveModel('opencode', 'session-123');
+  const activeModel = await service.getCurrentActiveModel('gemini', 'session-123');
 
-  assert.deepEqual(calls, [{ provider: 'opencode', sessionId: 'session-123' }]);
-  assert.equal(activeModel.model, 'opencode-session-123');
+  assert.deepEqual(calls, [{ provider: 'gemini', sessionId: 'session-123' }]);
+  assert.equal(activeModel.model, 'gemini-session-123');
 });
 
 test('provider models service delegates active model change requests to the provider adapter', async () => {

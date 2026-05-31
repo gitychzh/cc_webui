@@ -77,7 +77,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   cursor: 'Cursor',
   codex: 'Codex',
   gemini: 'Gemini',
-  opencode: 'OpenCode',
 };
 
 const FALLBACK_COMMANDS: CommandEntry[] = [

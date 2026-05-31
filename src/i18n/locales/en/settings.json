@@ -322,9 +322,6 @@
       },
       "gemini": {
         "description": "Google Gemini AI assistant"
-      },
-      "opencode": {
-        "description": "OpenCode CLI assistant"
       }
     },
     "connectionStatus": "Connection Status",
@@ -420,7 +417,7 @@
       "claude": "Model Context Protocol servers provide additional tools and data sources to Claude",
       "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
       "codex": "Model Context Protocol servers provide additional tools and data sources to Codex",
-      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode"
+      "gemini": "Model Context Protocol servers provide additional tools and data sources to Gemini"
     },
     "addButton": "Add MCP Server",
     "empty": "No MCP servers configured",

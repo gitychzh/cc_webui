@@ -29,12 +29,10 @@ type ChatWebSocketDependencies = {
   spawnCursor: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   queryCodex: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   spawnGemini: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
-  spawnOpenCode: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   abortClaudeSDKSession: (sessionId: string) => Promise<boolean>;
   abortCursorSession: (sessionId: string) => boolean;
   abortCodexSession: (sessionId: string) => boolean;
   abortGeminiSession: (sessionId: string) => boolean;
-  abortOpenCodeSession: (sessionId: string) => boolean;
   resolveToolApproval: (
     requestId: string,
     payload: {
@@ -48,21 +46,19 @@ type ChatWebSocketDependencies = {
   isCursorSessionActive: (sessionId: string) => boolean;
   isCodexSessionActive: (sessionId: string) => boolean;
   isGeminiSessionActive: (sessionId: string) => boolean;
-  isOpenCodeSessionActive: (sessionId: string) => boolean;
   reconnectSessionWriter: (sessionId: string, ws: WebSocket) => boolean;
   getPendingApprovalsForSession: (sessionId: string) => unknown[];
   getActiveClaudeSDKSessions: () => unknown;
   getActiveCursorSessions: () => unknown;
   getActiveCodexSessions: () => unknown;
   getActiveGeminiSessions: () => unknown;
-  getActiveOpenCodeSessions: () => unknown;
 };
 
 /**
  * Normalizes potentially invalid provider names coming from websocket payloads.
  */
 function readProvider(value: unknown): LLMProvider {
-  if (value === 'claude' || value === 'cursor' || value === 'codex' || value === 'gemini' || value === 'opencode') {
+  if (value === 'claude' || value === 'cursor' || value === 'codex' || value === 'gemini') {
     return value;
   }
 
@@ -138,11 +134,6 @@ export function handleChatConnection(
         return;
       }
 
-      if (messageType === 'opencode-command') {
-        await dependencies.spawnOpenCode(data.command ?? '', data.options, writer);
-        return;
-      }
-
       if (messageType === 'cursor-resume') {
         await dependencies.spawnCursor(
           '',
@@ -167,8 +158,6 @@ export function handleChatConnection(
           success = dependencies.abortCodexSession(sessionId);
         } else if (provider === 'gemini') {
           success = dependencies.abortGeminiSession(sessionId);
-        } else if (provider === 'opencode') {
-          success = dependencies.abortOpenCodeSession(sessionId);
         } else {
           success = await dependencies.abortClaudeSDKSession(sessionId);
         }
@@ -225,8 +214,6 @@ export function handleChatConnection(
           isActive = dependencies.isCodexSessionActive(sessionId);
         } else if (provider === 'gemini') {
           isActive = dependencies.isGeminiSessionActive(sessionId);
-        } else if (provider === 'opencode') {
-          isActive = dependencies.isOpenCodeSessionActive(sessionId);
         } else {
           isActive = dependencies.isClaudeSDKSessionActive(sessionId);
           if (isActive) {
@@ -264,7 +251,6 @@ export function handleChatConnection(
             cursor: dependencies.getActiveCursorSessions(),
             codex: dependencies.getActiveCodexSessions(),
             gemini: dependencies.getActiveGeminiSessions(),
-            opencode: dependencies.getActiveOpenCodeSessions(),
           },
         });
       }

@@ -308,12 +308,14 @@ function extractTokenBudget(sdkMessage) {
     const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
     const totalUsed = inputTokens + outputTokens;
     const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
+    const model = (sdkMessage.message?.model || sdkMessage.model || '').trim() || null;
 
     return {
       used: totalUsed,
       total: contextWindow,
       inputTokens,
       outputTokens,
+      model,
       breakdown: {
         input: inputTokens,
         output: outputTokens,
@@ -343,6 +345,7 @@ function extractTokenBudget(sdkMessage) {
     total: contextWindow,
     inputTokens,
     outputTokens,
+    model: modelKey || null,
     breakdown: {
       input: inputTokens,
       output: outputTokens,

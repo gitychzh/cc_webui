@@ -61,6 +61,7 @@ interface ChatComposerProps {
   thinkingMode: string;
   setThinkingMode: Dispatch<SetStateAction<string>>;
   tokenBudget: Record<string, unknown> | null;
+  model: string;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
@@ -116,6 +117,7 @@ export default function ChatComposer({
   thinkingMode,
   setThinkingMode,
   tokenBudget,
+  model,
   slashCommandsCount,
   onToggleCommandMenu,
   hasInput,
@@ -361,7 +363,7 @@ export default function ChatComposer({
               <ThinkingModeSelector selectedMode={thinkingMode} onModeChange={setThinkingMode} onClose={() => {}} className="" />
             )}
 
-            <TokenUsageSummary usage={tokenBudget} />
+            <TokenUsageSummary usage={tokenBudget} model={model} />
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}

@@ -365,6 +365,7 @@ function ChatInterface({
           thinkingMode={thinkingMode}
           setThinkingMode={setThinkingMode}
           tokenBudget={tokenBudget}
+          model={provider === 'claude' ? claudeModel : provider === 'gemini' ? geminiModel : provider === 'codex' ? codexModel : cursorModel}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}

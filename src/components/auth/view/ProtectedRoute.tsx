@@ -18,10 +18,6 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (IS_PLATFORM) {
-    if (!hasCompletedOnboarding) {
-      return <Onboarding onComplete={refreshOnboardingStatus} />;
-    }
-
     return <>{children}</>;
   }
 

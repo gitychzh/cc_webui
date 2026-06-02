@@ -306,7 +306,9 @@ function extractTokenBudget(sdkMessage) {
   if (messageUsage && typeof messageUsage === 'object') {
     const inputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
     const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
-    const totalUsed = inputTokens + outputTokens;
+    const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationTokens);
+    const cacheReadTokens = readNumber(messageUsage.cache_read_input_tokens ?? messageUsage.cacheReadTokens);
+    const totalUsed = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
     const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
     const model = (sdkMessage.message?.model || sdkMessage.model || '').trim() || null;
 
@@ -315,9 +317,13 @@ function extractTokenBudget(sdkMessage) {
       total: contextWindow,
       inputTokens,
       outputTokens,
+      cacheCreationTokens,
+      cacheReadTokens,
       model,
       breakdown: {
         input: inputTokens,
+        cacheCreation: cacheCreationTokens,
+        cacheRead: cacheReadTokens,
         output: outputTokens,
       },
     };
@@ -337,7 +343,9 @@ function extractTokenBudget(sdkMessage) {
 
   const inputTokens = readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
   const outputTokens = readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
-  const totalUsed = inputTokens + outputTokens;
+  const cacheCreationTokens = readNumber(modelData.cacheCreationInputTokens ?? modelData.cache_creation_input_tokens ?? 0);
+  const cacheReadTokens = readNumber(modelData.cacheReadInputTokens ?? modelData.cache_read_input_tokens ?? 0);
+  const totalUsed = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
   const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
 
   return {
@@ -345,9 +353,13 @@ function extractTokenBudget(sdkMessage) {
     total: contextWindow,
     inputTokens,
     outputTokens,
+    cacheCreationTokens,
+    cacheReadTokens,
     model: modelKey || null,
     breakdown: {
       input: inputTokens,
+      cacheCreation: cacheCreationTokens,
+      cacheRead: cacheReadTokens,
       output: outputTokens,
     },
   };
@@ -677,6 +689,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
+    // Cumulative token tracker for this query (SDK usage is per-message incremental)
+    let cumInput = 0;
+    let cumOutput = 0;
+    let cumCacheCreation = 0;
+    let cumCacheRead = 0;
+    let cumModel = null;
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -712,10 +730,37 @@ async function queryClaudeSDK(command, options = {}, ws) {
         ws.send(msg);
       }
 
-      // Extract and send token budget updates from assistant/result usage payloads
+      // Extract token budget updates from assistant/result usage payloads and
+      // accumulate across all messages in this query (SDK usage is incremental)
       const tokenBudgetData = extractTokenBudget(message);
       if (tokenBudgetData) {
-        ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        cumInput += tokenBudgetData.inputTokens || 0;
+        cumOutput += tokenBudgetData.outputTokens || 0;
+        cumCacheCreation += tokenBudgetData.cacheCreationTokens || 0;
+        cumCacheRead += tokenBudgetData.cacheReadTokens || 0;
+        if (tokenBudgetData.model) cumModel = tokenBudgetData.model;
+        const cumUsed = cumInput + cumOutput + cumCacheCreation + cumCacheRead;
+        const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
+        ws.send(createNormalizedMessage({
+          kind: 'status', text: 'token_budget',
+          tokenBudget: {
+            used: cumUsed,
+            total: contextWindow,
+            inputTokens: cumInput,
+            outputTokens: cumOutput,
+            cacheCreationTokens: cumCacheCreation,
+            cacheReadTokens: cumCacheRead,
+            model: cumModel,
+            breakdown: {
+              input: cumInput,
+              cacheCreation: cumCacheCreation,
+              cacheRead: cumCacheRead,
+              output: cumOutput,
+            },
+          },
+          sessionId: capturedSessionId || sessionId || null,
+          provider: 'claude'
+        }));
       }
     }
 

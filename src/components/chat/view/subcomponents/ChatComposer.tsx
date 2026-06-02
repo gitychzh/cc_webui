@@ -188,6 +188,7 @@ export default function ChatComposer({
 
       {pendingPermissionRequests.length > 0 && (
         <div className="mx-auto mb-3 max-w-4xl">
+          {hasQuestionPanel && <div className="mb-2"><TokenUsageSummary usage={tokenBudget} model={model} /></div>}
           <PermissionRequestsBanner
             pendingPermissionRequests={pendingPermissionRequests}
             handlePermissionDecision={handlePermissionDecision}

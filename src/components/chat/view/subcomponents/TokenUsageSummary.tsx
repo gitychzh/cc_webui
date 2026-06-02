@@ -40,7 +40,9 @@ export default function TokenUsageSummary({ usage, model }: TokenUsageSummaryPro
     : null;
   const inputTokens = readUsageNumber(usage?.inputTokens ?? breakdown?.input);
   const outputTokens = readUsageNumber(usage?.outputTokens ?? breakdown?.output);
-  const usedTokens = readUsageNumber(usage?.used) || inputTokens + outputTokens;
+  const cacheCreationTokens = readUsageNumber(usage?.cacheCreationTokens ?? breakdown?.cacheCreation);
+  const cacheReadTokens = readUsageNumber(usage?.cacheReadTokens ?? breakdown?.cacheRead);
+  const usedTokens = readUsageNumber(usage?.used) || inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
   const totalTokens = readUsageNumber(usage?.total) || 0;
   const budgetModel = typeof usage?.model === 'string' ? usage.model : null;
   const displayModel = resolveModelLabel(budgetModel || model);
@@ -64,6 +66,8 @@ export default function TokenUsageSummary({ usage, model }: TokenUsageSummaryPro
     <div className="flex flex-col gap-0.5 text-[11px]">
       {displayModel && <div className="font-semibold">{displayModel}</div>}
       <div>Input: {inputTokens.toLocaleString()} ({formatK(inputTokens)})</div>
+      {cacheCreationTokens > 0 && <div>Cache creation: {cacheCreationTokens.toLocaleString()} ({formatK(cacheCreationTokens)})</div>}
+      {cacheReadTokens > 0 && <div>Cache read: {cacheReadTokens.toLocaleString()} ({formatK(cacheReadTokens)})</div>}
       <div>Output: {outputTokens.toLocaleString()} ({formatK(outputTokens)})</div>
       <div>Total: {usedTokens.toLocaleString()} ({formatK(usedTokens)}) / {totalTokens.toLocaleString()} ({formatK(totalTokens)})</div>
       <div>Context: {pct.toFixed(1)}% used</div>

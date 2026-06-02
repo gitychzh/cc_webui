@@ -625,12 +625,52 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       ? false
       : Math.max(0, totalNormalized - normalizedOffset - normalizedLimit) > 0;
 
+    // Accumulate token usage across ALL assistant messages (per-message
+    // values in JSONL are incremental, not cumulative)
+    let tokenUsage: Record<string, unknown> | undefined;
+    let accInput = 0;
+    let accOutput = 0;
+    let accCacheCreation = 0;
+    let accCacheRead = 0;
+    let lastModel: string | null = null;
+    for (const entry of rawMessages) {
+      if (entry.type === 'assistant' && entry.message?.usage) {
+        const usage = entry.message.usage;
+        accInput += usage.input_tokens ?? usage.inputTokens ?? 0;
+        accOutput += usage.output_tokens ?? usage.outputTokens ?? 0;
+        accCacheCreation += usage.cache_creation_input_tokens ?? usage.cacheCreationTokens ?? 0;
+        accCacheRead += usage.cache_read_input_tokens ?? usage.cacheReadTokens ?? 0;
+        const m = (entry.message?.model ?? '').trim();
+        if (m) lastModel = m;
+      }
+    }
+    const totalUsed = accInput + accOutput + accCacheCreation + accCacheRead;
+    const contextWindow = parseInt(process.env.CONTEXT_WINDOW as string, 10) || 160000;
+    if (totalUsed > 0) {
+      tokenUsage = {
+        used: totalUsed,
+        total: contextWindow,
+        inputTokens: accInput,
+        outputTokens: accOutput,
+        cacheCreationTokens: accCacheCreation,
+        cacheReadTokens: accCacheRead,
+        model: lastModel,
+        breakdown: {
+          input: accInput,
+          cacheCreation: accCacheCreation,
+          cacheRead: accCacheRead,
+          output: accOutput,
+        },
+      };
+    }
+
     return {
       messages,
       total,
       hasMore,
       offset: normalizedOffset,
       limit: normalizedLimit,
+      tokenUsage,
     };
   }
 }

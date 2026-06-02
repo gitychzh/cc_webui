@@ -1330,39 +1330,49 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
 
         const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
         const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
+        // Accumulate token usage across ALL assistant messages (per-message
+        // values in the JSONL are incremental, not cumulative)
         let inputTokens = 0;
         let outputTokens = 0;
+        let cacheCreationTokens = 0;
+        let cacheReadTokens = 0;
+        let model = null;
 
-        // Find the latest assistant message with usage data (scan from end)
-        for (let i = lines.length - 1; i >= 0; i--) {
+        for (let i = 0; i < lines.length; i++) {
             try {
                 const entry = JSON.parse(lines[i]);
 
-                // Only count assistant messages which have usage data
                 if (entry.type === 'assistant' && entry.message?.usage) {
                     const usage = entry.message.usage;
 
-                    // Use token counts from latest assistant message only
-                    inputTokens = usage.input_tokens || 0;
-                    outputTokens = usage.output_tokens || 0;
+                    inputTokens += usage.input_tokens || 0;
+                    outputTokens += usage.output_tokens || 0;
+                    cacheCreationTokens += usage.cache_creation_input_tokens || 0;
+                    cacheReadTokens += usage.cache_read_input_tokens || 0;
 
-                    break; // Stop after finding the latest assistant message
+                    // Capture model from the last assistant message
+                    const msgModel = (entry.message?.model || '').trim();
+                    if (msgModel) model = msgModel;
                 }
             } catch (parseError) {
-                // Skip lines that can't be parsed
                 continue;
             }
         }
 
-        const totalUsed = inputTokens + outputTokens;
+        const totalUsed = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
 
         res.json({
             used: totalUsed,
             total: contextWindow,
             inputTokens,
             outputTokens,
+            cacheCreationTokens,
+            cacheReadTokens,
+            model,
             breakdown: {
                 input: inputTokens,
+                cacheCreation: cacheCreationTokens,
+                cacheRead: cacheReadTokens,
                 output: outputTokens
             }
         });
